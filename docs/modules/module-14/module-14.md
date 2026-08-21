@@ -141,3 +141,8 @@ At completion, run all relevant checks/tests and create:
 `summary/module-14-summary.md`
 
 Document implemented functionality, AI/provider architecture, grounding strategy, source/provenance handling, API/schema changes, tests performed, safety limitations/TODOs, and explicitly state that **Module 14 is post-MVP and excluded from MVP 1**.
+
+---
+
+### Context & Memory Management
+**Clear your memory:** When starting this module, clear your memory / context. Read only the necessary information that you need from prerequisite module summaries after reading this prompt. If your memory/context is inflating or floating, you are free to write down the references and notes you need in a temporary file (e.g., `.memory` or `scratch/memory.md`) and keep referencing and updating that memory file as long as you need.

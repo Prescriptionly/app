@@ -149,3 +149,8 @@ At completion, run relevant tests/checks and create:
 `summary/module-21-summary.md`
 
 Include implemented architecture, supported job types, retry/idempotency/deduplication strategy, concurrency/cost controls, schema/API changes, failure/recovery behavior, tests performed, and remaining limitations/TODOs.
+
+---
+
+### Context & Memory Management
+**Clear your memory:** When starting this module, clear your memory / context. Read only the necessary information that you need from prerequisite module summaries after reading this prompt. If your memory/context is inflating or floating, you are free to write down the references and notes you need in a temporary file (e.g., `.memory` or `scratch/memory.md`) and keep referencing and updating that memory file as long as you need.

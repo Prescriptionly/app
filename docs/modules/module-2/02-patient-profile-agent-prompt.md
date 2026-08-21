@@ -183,3 +183,8 @@ Module 2 is complete when an authenticated user can create, view, and edit exact
 Before finishing, critique the implementation for over-collected sensitive data, auth/profile coupling, false DOB precision, Western-only name assumptions, invalid timezone handling, mass assignment, ownership bypasses, duplicate profiles, and unnecessary abstractions. Fix all high-severity findings.
 
 **After completing Module 2, create the summary directory if needed and write a concise completion summary to the project's existing summary folder using `patient-profile-YYYY-MM-DD-HHmm.md` (use `docs summary/` if that is the convention established by Modules 0/1). Include implemented behavior, schema/migration changes, endpoints/UI, tests/checks run, important decisions, limitations, and deferred work.**
+
+---
+
+### Context & Memory Management
+**Clear your memory:** When starting this module, clear your memory / context. Read only the necessary information that you need from prerequisite module summaries after reading this prompt. If your memory/context is inflating or floating, you are free to write down the references and notes you need in a temporary file (e.g., `.memory` or `scratch/memory.md`) and keep referencing and updating that memory file as long as you need.

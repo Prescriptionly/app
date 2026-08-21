@@ -488,3 +488,8 @@ Before finishing:
    * remaining risks/deferred work.
 
 **After completing this module, create the directory if needed and write a concise implementation summary to `docs summary/authentication-and-identity-YYYY-MM-DD-HHmm.md`, using the actual completion date and time; include implemented behavior, important files/migrations, tests run, architectural decisions, known limitations, and deferred items.**
+
+---
+
+### Context & Memory Management
+**Clear your memory:** When starting this module, clear your memory / context. Read only the necessary information that you need from prerequisite module summaries after reading this prompt. If your memory/context is inflating or floating, you are free to write down the references and notes you need in a temporary file (e.g., `.memory` or `scratch/memory.md`) and keep referencing and updating that memory file as long as you need.

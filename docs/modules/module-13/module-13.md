@@ -65,3 +65,8 @@ At completion, run the relevant checks/tests and create:
 `summary/module-13-summary.md`
 
 Document what was implemented, schema/API changes, important architectural decisions, tests performed, limitations/TODOs, and explicitly state that **Module 13 belongs to Phase 2 and is excluded from the MVP**.
+
+---
+
+### Context & Memory Management
+**Clear your memory:** When starting this module, clear your memory / context. Read only the necessary information that you need from prerequisite module summaries after reading this prompt. If your memory/context is inflating or floating, you are free to write down the references and notes you need in a temporary file (e.g., `.memory` or `scratch/memory.md`) and keep referencing and updating that memory file as long as you need.

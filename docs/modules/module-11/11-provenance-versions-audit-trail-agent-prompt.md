@@ -472,3 +472,8 @@ Before finishing, critique the implementation for:
 Fix all high-severity findings before completion.
 
 **After completing Module 11, create the summary directory if needed and write a concise completion summary to the project's established summary folder as `provenance-versions-audit-trail-YYYY-MM-DD-HHmm.md`. Use `docs summary/` if that is the convention established by earlier modules. Include schema/migration changes, audit/version design, actor/source semantics, correction integration, evidence links, transaction/concurrency rules, endpoints/UI, tests/checks run, known limitations, and deferred work.**
+
+---
+
+### Context & Memory Management
+**Clear your memory:** When starting this module, clear your memory / context. Read only the necessary information that you need from prerequisite module summaries after reading this prompt. If your memory/context is inflating or floating, you are free to write down the references and notes you need in a temporary file (e.g., `.memory` or `scratch/memory.md`) and keep referencing and updating that memory file as long as you need.
