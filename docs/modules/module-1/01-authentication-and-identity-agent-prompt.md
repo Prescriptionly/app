@@ -2,7 +2,7 @@
 
 ## Role and goal
 
-Implement **Module 1: Authentication & Identity** for Prescriptionly, a modular monolith using React on the frontend, Node.js + Express on the backend, and PostgreSQL as the relational database.
+Implement **Module 1: Authentication & Identity** for Prescriptionly, a modular monolith using React on the frontend, Node.js + Express on the backend, and SQL as the relational database.
 
 Work only on this module and the minimum shared infrastructure it requires. Inspect the repository first and preserve existing conventions, package choices, TypeScript/JavaScript choice, linting, testing, API structure, and database tooling. Do not rewrite working project foundations merely to match this prompt.
 
@@ -62,7 +62,7 @@ Required behavior:
 
 * On successful authentication, generate a cryptographically random session token.
 * Send the raw token only in an `HttpOnly` cookie.
-* Store only a secure digest/hash of the session token in PostgreSQL.
+* Store only a secure digest/hash of the session token in SQL.
 * A session must be individually revocable.
 * Rotate/create a new session after login and after sensitive credential recovery.
 * Revoke all existing sessions after a successful password reset.

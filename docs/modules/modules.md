@@ -819,7 +819,7 @@ Express API
     ↓
 Domain Modules
     ↓
-PostgreSQL
+SQL
 
 Object Storage
     ↑
