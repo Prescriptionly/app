@@ -1,0 +1,696 @@
+// Prisma Schema for Prescriptionly
+// Database: MySQL
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// ==========================================
+// MODULE 1: AUTHENTICATION & IDENTITY
+// ==========================================
+
+enum AccountStatus {
+  PENDING_VERIFICATION
+  ACTIVE
+  SUSPENDED
+  DELETED
+}
+
+model Account {
+  id               String         @id @default(uuid())
+  email            String         @unique
+  pendingNewEmail  String?
+  passwordHash     String
+  status           AccountStatus  @default(PENDING_VERIFICATION)
+  isVerified       Boolean        @default(false)
+  isAdmin          Boolean        @default(false)
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  deletedAt        DateTime?
+
+  sessions         Session[]
+  emailTokens      EmailVerificationToken[]
+  resetTokens      PasswordResetToken[]
+  patientProfiles  PatientProfile[]
+  auditEvents      AuditEvent[]
+  consents         SecurityConsent[]
+  notifications    Notification[]
+
+  @@index([email])
+  @@index([status])
+}
+
+model Session {
+  id           String    @id @default(uuid())
+  accountId    String
+  account      Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  tokenHash    String    @unique
+  csrfToken    String
+  ipAddress    String?
+  userAgent    String?
+  expiresAt    DateTime
+  revokedAt    DateTime?
+  lastActiveAt DateTime  @default(now())
+  createdAt    DateTime  @default(now())
+
+  @@index([accountId])
+  @@index([tokenHash])
+  @@index([expiresAt])
+}
+
+model EmailVerificationToken {
+  id         String    @id @default(uuid())
+  accountId  String
+  account    Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  tokenHash  String    @unique
+  targetEmail String
+  expiresAt  DateTime
+  usedAt     DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([accountId])
+  @@index([tokenHash])
+}
+
+model PasswordResetToken {
+  id         String    @id @default(uuid())
+  accountId  String
+  account    Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  tokenHash  String    @unique
+  expiresAt  DateTime
+  usedAt     DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([accountId])
+  @@index([tokenHash])
+}
+
+// ==========================================
+// MODULE 2: PATIENT PROFILE
+// ==========================================
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+  UNKNOWN
+}
+
+model PatientProfile {
+  id               String       @id @default(uuid())
+  accountId        String
+  account          Account      @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  displayName      String
+  dateOfBirth      DateTime?
+  isDobApproximate Boolean      @default(false)
+  gender           Gender       @default(UNKNOWN)
+  bloodGroup       String?
+  emergencyNotes   String?      @db.Text
+  language         String       @default("en")
+  timezone         String       @default("UTC")
+  isPrimary        Boolean      @default(true)
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+  deletedAt        DateTime?
+
+  documents        Document[]
+  prescriptions    Prescription[]
+  treatments       Treatment[]
+  medicationEvents MedicationEvent[]
+  symptoms         Symptom[]
+  shareGrants      ShareGrant[]
+  emergencyProfile EmergencyProfile?
+  healthSummaries  HealthSummary[]
+  exportJobs       ExportJob[]
+  auditEvents      AuditEvent[]
+  backgroundJobs   BackgroundJob[]
+
+  @@index([accountId])
+  @@index([deletedAt])
+}
+
+// ==========================================
+// MODULE 3: MEDICAL DOCUMENT VAULT
+// ==========================================
+
+enum DocumentCategory {
+  PRESCRIPTION
+  LAB_REPORT
+  IMAGING_REPORT
+  DISCHARGE_SUMMARY
+  DOCTOR_LETTER
+  OTHER
+}
+
+enum DocumentStatus {
+  ACTIVE
+  ARCHIVED
+  DELETED
+}
+
+model Document {
+  id               String           @id @default(uuid())
+  patientProfileId String
+  patientProfile   PatientProfile   @relation(fields: [patientProfileId], references: [id], onDelete: Cascade)
+  title            String
+  category         DocumentCategory @default(OTHER)
+  status           DocumentStatus   @default(ACTIVE)
+  notes            String?          @db.Text
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  deletedAt        DateTime?
+
+  versions         DocumentVersion[]
+  prescriptions    Prescription[]
+
+  @@index([patientProfileId])
+  @@index([category])
+  @@index([status])
+}
+
+model DocumentVersion {
+  id            String               @id @default(uuid())
+  documentId    String
+  document      Document             @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  storageKey    String
+  fileHash      String               // SHA-256 for deduplication
+  fileName      String
+  fileSizeBytes Int
+  mimeType      String
+  pageCount     Int                  @default(1)
+  versionNumber Int                  @default(1)
+  createdAt     DateTime             @default(now())
+
+  extractions   DocumentExtraction[]
+
+  @@index([documentId])
+  @@index([fileHash])
+}
+
+// ==========================================
+// MODULE 4: DOCUMENT PROCESSING & OCR REVIEW
+// ==========================================
+
+enum ExtractionStatus {
+  PENDING
+  PROCESSING
+  EXTRACTED
+  FAILED
+  CONFIRMED
+}
+
+model DocumentExtraction {
+  id                   String           @id @default(uuid())
+  documentVersionId    String
+  documentVersion      DocumentVersion  @relation(fields: [documentVersionId], references: [id], onDelete: Cascade)
+  status               ExtractionStatus @default(PENDING)
+  ocrText              String?          @db.LongText
+  confidenceScoresJson String?          @db.Text    // Field-level confidence
+  rawExtractedJson     String?          @db.LongText // Untrusted OCR/AI candidates
+  verifiedJson         String?          @db.LongText // User verified structured changes
+  isConfirmed          Boolean          @default(false)
+  confirmedAt          DateTime?
+  confirmedByAccountId String?
+  errorMessage         String?          @db.Text
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
+
+  @@index([documentVersionId])
+  @@index([status])
+}
+
+// ==========================================
+// MODULE 6: MEDICATION KNOWLEDGE / CATALOG
+// ==========================================
+
+enum DosageForm {
+  TABLET
+  CAPSULE
+  SYRUP
+  INJECTION
+  CREAM
+  OINTMENT
+  INHALER
+  DROPS
+  PATCH
+  POWDER
+  OTHER
+}
+
+model MedicationConcept {
+  id                String       @id @default(uuid())
+  code              String?      @unique
+  name              String
+  genericName       String?
+  form              DosageForm   @default(TABLET)
+  defaultStrength   String?
+  defaultRoute      String?
+  isCustom          Boolean      @default(false)
+  createdAt         DateTime     @default(now())
+
+  prescriptionItems PrescriptionItem[]
+
+  @@index([name])
+  @@index([code])
+}
+
+// ==========================================
+// MODULE 5: PRESCRIPTION MANAGEMENT
+// ==========================================
+
+enum PrescriptionStatus {
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+model Prescription {
+  id               String             @id @default(uuid())
+  patientProfileId String
+  patientProfile   PatientProfile     @relation(fields: [patientProfileId], references: [id], onDelete: Cascade)
+  sourceDocumentId String?
+  sourceDocument   Document?          @relation(fields: [sourceDocumentId], references: [id], onDelete: SetNull)
+  prescriberName   String?
+  clinicName       String?
+  prescribedDate   DateTime
+  notes            String?            @db.Text
+  status           PrescriptionStatus @default(ACTIVE)
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  deletedAt        DateTime?
+
+  items            PrescriptionItem[]
+
+  @@index([patientProfileId])
+  @@index([prescribedDate])
+}
+
+model PrescriptionItem {
+  id                     String              @id @default(uuid())
+  prescriptionId         String
+  prescription           Prescription        @relation(fields: [prescriptionId], references: [id], onDelete: Cascade)
+  medicationConceptId    String?
+  medicationConcept      MedicationConcept?  @relation(fields: [medicationConceptId], references: [id], onDelete: SetNull)
+  enteredMedicationName  String
+  form                   DosageForm          @default(TABLET)
+  strength               String?
+  originalInstructionText String             @db.Text
+  normalizationStatus    String              @default("USER_ENTERED")
+  createdAt              DateTime            @default(now())
+  updatedAt              DateTime            @updatedAt
+
+  dosageInstructions     DosageInstruction[]
+  treatments             Treatment[]
+
+  @@index([prescriptionId])
+  @@index([medicationConceptId])
+}
+
+// ==========================================
+// MODULE 7: DOSAGE & INSTRUCTIONS
+// ==========================================
+
+enum FrequencyPeriod {
+  DAY
+  WEEK
+  MONTH
+  AS_NEEDED
+}
+
+model DosageInstruction {
+  id                 String           @id @default(uuid())
+  prescriptionItemId String
+  prescriptionItem   PrescriptionItem @relation(fields: [prescriptionItemId], references: [id], onDelete: Cascade)
+  doseQuantity       Decimal          @db.Decimal(10, 3)
+  doseUnit           String
+  route              String?
+  frequencyCount     Int              @default(1)
+  frequencyPeriod    FrequencyPeriod  @default(DAY)
+  timingDetails      String?
+  isPrn              Boolean          @default(false)
+  prnReason          String?
+  durationDays       Int?
+  maxDailyDose       Decimal?         @db.Decimal(10, 3)
+  createdAt          DateTime         @default(now())
+
+  @@index([prescriptionItemId])
+}
+
+// ==========================================
+// MODULE 8: TREATMENTS / MEDICATION COURSES
+// ==========================================
+
+enum TreatmentStatus {
+  PLANNED
+  ACTIVE
+  PAUSED
+  COMPLETED
+  DISCONTINUED
+}
+
+model Treatment {
+  id                 String              @id @default(uuid())
+  patientProfileId   String
+  patientProfile     PatientProfile      @relation(fields: [patientProfileId], references: [id], onDelete: Cascade)
+  prescriptionItemId String?
+  prescriptionItem   PrescriptionItem?   @relation(fields: [prescriptionItemId], references: [id], onDelete: SetNull)
+  customMedicationName String?
+  status             TreatmentStatus     @default(ACTIVE)
+  startDate          DateTime
+  endDate            DateTime?
+  stopReason         String?
+  notes              String?             @db.Text
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+
+  schedules          TreatmentSchedule[]
+  medicationEvents   MedicationEvent[]
+  symptoms           Symptom[]
+
+  @@index([patientProfileId])
+  @@index([prescriptionItemId])
+  @@index([status])
+}
+
+// ==========================================
+// MODULE 9: SCHEDULES & EXPECTED DOSES
+// ==========================================
+
+model TreatmentSchedule {
+  id           String         @id @default(uuid())
+  treatmentId  String
+  treatment    Treatment      @relation(fields: [treatmentId], references: [id], onDelete: Cascade)
+  intervalDays Int            @default(1)
+  timesOfDayJson String       // Array of times, e.g. ["08:00", "20:00"]
+  timezone     String         @default("UTC")
+  startDate    DateTime
+  endDate      DateTime?
+  createdAt    DateTime       @default(now())
+
+  expectedDoses ExpectedDose[]
+
+  @@index([treatmentId])
+}
+
+enum ExpectedDoseStatus {
+  PENDING
+  OVERDUE
+  LOGGED
+  SKIPPED
+}
+
+model ExpectedDose {
+  id                  String              @id @default(uuid())
+  treatmentScheduleId String
+  treatmentSchedule   TreatmentSchedule   @relation(fields: [treatmentScheduleId], references: [id], onDelete: Cascade)
+  expectedTimestamp   DateTime
+  expectedQuantity    Decimal             @db.Decimal(10, 3)
+  unit                String
+  status              ExpectedDoseStatus  @default(PENDING)
+  createdAt           DateTime            @default(now())
+
+  medicationEvents    MedicationEvent[]
+
+  @@index([treatmentScheduleId])
+  @@index([expectedTimestamp])
+  @@index([status])
+}
+
+// ==========================================
+// MODULE 10: MEDICATION EVENT TRACKING
+// ==========================================
+
+enum MedicationAction {
+  TAKEN
+  ADMINISTERED
+  APPLIED
+  USED
+  SKIPPED
+  PARTIAL
+  OTHER
+}
+
+model MedicationEvent {
+  id                String            @id @default(uuid())
+  patientProfileId  String
+  patientProfile    PatientProfile    @relation(fields: [patientProfileId], references: [id], onDelete: Cascade)
+  treatmentId       String?
+  treatment         Treatment?        @relation(fields: [treatmentId], references: [id], onDelete: SetNull)
+  expectedDoseId    String?
+  expectedDose      ExpectedDose?     @relation(fields: [expectedDoseId], references: [id], onDelete: SetNull)
+  medicationName    String
+  form              DosageForm        @default(TABLET)
+  quantity          Decimal           @db.Decimal(10, 3)
+  unit              String
+  action            MedicationAction  @default(TAKEN)
+  eventTimestamp    DateTime          // When dose was actually taken/skipped
+  isApproximateTime Boolean           @default(false)
+  recordedAt        DateTime          @default(now()) // When record was entered
+  notes             String?           @db.Text
+  correctionNotes   String?           @db.Text
+  isStandalone      Boolean           @default(false) // OTC, supplements, ad-hoc
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  @@index([patientProfileId])
+  @@index([treatmentId])
+  @@index([expectedDoseId])
+  @@index([eventTimestamp])
+}
+
+// ==========================================
+// MODULE 13: SYMPTOMS & OBSERVATIONS (PHASE 2)
+// ==========================================
+
+enum SymptomSeverity {
+  MILD
+  MODERATE
+  SEVERE
+  CRITICAL
+}
+
+model Symptom {
+  id               String          @id @default(uuid())
+  patientProfileId String
+  patientProfile   PatientProfile  @relation(fields: [patientProfileId], references: [id], onDelete: Cascade)
+  treatmentId      String?         // Association ONLY, non-causal
+  treatment        Treatment?      @relation(fields: [treatmentId], references: [id], onDelete: SetNull)
+  name             String
+  severity         SymptomSeverity @default(MILD)
+  startedAt        DateTime
+  endedAt          DateTime?
+  isApproximate    Boolean         @default(false)
+  notes            String?         @db.Text
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  @@index([patientProfileId])
+  @@index([treatmentId])
+  @@index([startedAt])
+}
+
+// ==========================================
+// MODULE 15: HEALTH SUMMARIES (PHASE 2)
+// ==========================================
+
+enum SummaryType {
+  PATIENT
+  CLINICIAN
+}
+
+model HealthSummary {
+  id               String         @id @default(uuid())
+  patientProfileId String
+  patientProfile   PatientProfile @relation(fields: [patientProfileId], references: [id], onDelete: Cascade)
+  summaryType      SummaryType    @default(PATIENT)
+  title            String
+  contentMarkdown  String         @db.LongText
+  provenanceJson   String         @db.Text
+  createdAt        DateTime       @default(now())
+
+  @@index([patientProfileId])
+  @@index([summaryType])
+}
+
+// ==========================================
+// MODULE 16: EXPORT & INTEROPERABILITY
+// ==========================================
+
+enum ExportFormat {
+  PDF
+  JSON
+  FHIR_R4
+}
+
+enum JobStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+model ExportJob {
+  id               String         @id @default(uuid())
+  patientProfileId String
+  patientProfile   PatientProfile @relation(fields: [patientProfileId], references: [id], onDelete: Cascade)
+  format           ExportFormat   @default(PDF)
+  status           JobStatus      @default(PENDING)
+  storageKey       String?
+  filterScopeJson  String?        @db.Text
+  errorMessage     String?        @db.Text
+  createdAt        DateTime       @default(now())
+  completedAt      DateTime?
+
+  @@index([patientProfileId])
+  @@index([status])
+}
+
+// ==========================================
+// MODULE 17: SHARING & CONSENT
+// ==========================================
+
+model ShareGrant {
+  id                   String         @id @default(uuid())
+  patientProfileId     String
+  patientProfile       PatientProfile @relation(fields: [patientProfileId], references: [id], onDelete: Cascade)
+  tokenHash            String         @unique
+  recipientLabel       String
+  allowedCategoriesJson String        @db.Text // ["MEDICATIONS", "HISTORY", "DOCUMENTS", "SYMPTOMS"]
+  dateStart            DateTime?
+  dateEnd              DateTime?
+  expiresAt            DateTime
+  revokedAt            DateTime?
+  accessCount          Int            @default(0)
+  lastAccessedAt       DateTime?
+  createdAt            DateTime       @default(now())
+
+  @@index([patientProfileId])
+  @@index([tokenHash])
+  @@index([expiresAt])
+}
+
+// ==========================================
+// MODULE 18: EMERGENCY CARD
+// ==========================================
+
+model EmergencyProfile {
+  id                     String         @id @default(uuid())
+  patientProfileId       String         @unique
+  patientProfile         PatientProfile @relation(fields: [patientProfileId], references: [id], onDelete: Cascade)
+  tokenHash              String         @unique
+  emergencyContactsJson  String         @db.Text // Array of {name, relation, phone}
+  selectedAllergiesJson  String         @db.Text // Array of allergy strings
+  selectedMedicationIdsJson String      @db.Text // Array of treatment/medication IDs
+  medicalNotes           String?        @db.Text
+  isEnabled              Boolean        @default(true)
+  createdAt              DateTime       @default(now())
+  updatedAt              DateTime       @updatedAt
+
+  @@index([tokenHash])
+}
+
+// ==========================================
+// MODULE 19: NOTIFICATIONS & REMINDERS
+// ==========================================
+
+enum NotificationType {
+  MEDICATION_REMINDER
+  OCR_COMPLETED
+  EXPORT_READY
+  SECURITY_ALERT
+  SYSTEM
+}
+
+model Notification {
+  id         String           @id @default(uuid())
+  accountId  String
+  account    Account          @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  type       NotificationType @default(SYSTEM)
+  title      String
+  message    String           @db.Text
+  isRead     Boolean          @default(false)
+  linkUrl    String?
+  createdAt  DateTime         @default(now())
+
+  @@index([accountId])
+  @@index([isRead])
+}
+
+// ==========================================
+// MODULE 20: PRIVACY, SECURITY & CONSENT
+// ==========================================
+
+model SecurityConsent {
+  id          String   @id @default(uuid())
+  accountId   String
+  account     Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  consentType String
+  granted     Boolean  @default(true)
+  ipAddress   String?
+  userAgent   String?
+  createdAt   DateTime @default(now())
+
+  @@index([accountId])
+  @@index([consentType])
+}
+
+// ==========================================
+// MODULE 11 & 22: AUDIT TRAIL & SYSTEM LOGS
+// ==========================================
+
+model AuditEvent {
+  id               String          @id @default(uuid())
+  patientProfileId String?
+  patientProfile   PatientProfile? @relation(fields: [patientProfileId], references: [id], onDelete: SetNull)
+  accountId        String?
+  account          Account?        @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  action           String          // e.g. "AUTH_LOGIN", "DOC_UPLOAD", "OCR_CONFIRM", "MED_LOG"
+  entityType       String          // e.g. "Account", "Document", "Prescription", "MedicationEvent"
+  entityId         String?
+  metadataJson     String?         @db.Text
+  ipAddress        String?
+  createdAt        DateTime        @default(now())
+
+  @@index([patientProfileId])
+  @@index([accountId])
+  @@index([action])
+  @@index([createdAt])
+}
+
+// ==========================================
+// MODULE 21: BACKGROUND JOBS & QUEUE
+// ==========================================
+
+enum BackgroundJobType {
+  OCR_PROCESSING
+  AI_SUMMARY
+  EXPORT_GENERATION
+  NOTIFICATION_DISPATCH
+  DATA_CLEANUP
+}
+
+model BackgroundJob {
+  id               String            @id @default(uuid())
+  patientProfileId String?
+  patientProfile   PatientProfile?   @relation(fields: [patientProfileId], references: [id], onDelete: SetNull)
+  jobType          BackgroundJobType
+  payloadJson      String            @db.LongText
+  status           JobStatus         @default(PENDING)
+  attempts         Int               @default(0)
+  maxAttempts      Int               @default(3)
+  scheduledAt      DateTime          @default(now())
+  lockedAt         DateTime?
+  completedAt      DateTime?
+  lastError        String?           @db.Text
+  deduplicationKey String?           @unique
+  createdAt        DateTime          @default(now())
+
+  @@index([status])
+  @@index([jobType])
+  @@index([scheduledAt])
+}
