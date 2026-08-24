@@ -1,4 +1,5 @@
 import { prisma } from '../../infrastructure/database/prisma';
+import { aiProviderService } from '../../infrastructure/ai/ai-provider';
 import { NotFoundError } from '../../shared/errors/app-error';
 
 export class AdminService {
@@ -22,6 +23,7 @@ export class AdminService {
         pending: pendingJobsCount,
         failed: failedJobsCount,
       },
+      activeAiConfig: aiProviderService.getActiveConfig(),
       systemHealth: 'OPERATIONAL',
       timestamp: new Date().toISOString(),
     };

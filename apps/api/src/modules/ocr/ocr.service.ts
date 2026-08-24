@@ -1,24 +1,11 @@
 import { DosageForm, FrequencyPeriod, Prisma } from '@prisma/client';
 import { prisma } from '../../infrastructure/database/prisma';
+import { storage } from '../../infrastructure/storage/local-disk-storage';
+import { aiProviderService, ExtractedMedicationCandidate } from '../../infrastructure/ai/ai-provider';
 import { ForbiddenError, NotFoundError, ValidationError } from '../../shared/errors/app-error';
+import { logger } from '../../shared/logging/logger';
 
-export interface ExtractedMedicationCandidate {
-  enteredName: string;
-  form: DosageForm;
-  strength?: string | null;
-  originalInstructionText: string;
-  doseQuantity: number;
-  doseUnit: string;
-  route?: string | null;
-  frequencyCount: number;
-  frequencyPeriod: FrequencyPeriod;
-  timingDetails?: string | null;
-  isPrn: boolean;
-  prnReason?: string | null;
-  durationDays?: number | null;
-  confidence: number;
-  warningFlags: string[];
-}
+export type { ExtractedMedicationCandidate };
 
 export class OcrService {
   async processExtractionDraft(documentVersionId: string): Promise<void> {
@@ -51,99 +38,57 @@ export class OcrService {
     }
 
     try {
-      // Mock / Rule-based OCR extractor for demo & test resilience
-      const mockRawText = `
-        Clinic: Metro Health Clinic
-        Prescriber: Dr. Sarah Jenkins, MD
-        Date: ${new Date().toISOString().split('T')[0]}
-        
-        Rx:
-        1. Metformin 500mg - Take 1 tablet twice daily with meals.
-        2. Amoxicillin 0.5g - 1 capsule every 8 hours for 7 days.
-        3. Paracetamol 500mg - 1-2 tablets every 6 hours PRN for fever.
-      `;
+      // 1. Read document file buffer from private storage
+      const fileBuffer = await storage.getFileBuffer(version.storageKey);
 
-      const candidates: ExtractedMedicationCandidate[] = [
-        {
-          enteredName: 'Metformin',
-          form: 'TABLET',
-          strength: '500 mg',
-          originalInstructionText: 'Take 1 tablet twice daily with meals.',
-          doseQuantity: 1,
-          doseUnit: 'tablet',
-          route: 'Oral',
-          frequencyCount: 2,
-          frequencyPeriod: 'DAY',
-          timingDetails: 'With meals',
-          isPrn: false,
-          durationDays: 30,
-          confidence: 0.96,
-          warningFlags: [],
-        },
-        {
-          enteredName: 'Amoxicillin',
-          form: 'CAPSULE',
-          strength: '500 mg',
-          originalInstructionText: '1 capsule every 8 hours for 7 days.',
-          doseQuantity: 1,
-          doseUnit: 'capsule',
-          route: 'Oral',
-          frequencyCount: 3,
-          frequencyPeriod: 'DAY',
-          timingDetails: 'Every 8 hours',
-          isPrn: false,
-          durationDays: 7,
-          confidence: 0.74,
-          warningFlags: [
-            'POTENTIAL_DECIMAL_AMBIGUITY: Strength was read as "0.5g / 500mg". Please verify the decimal point.',
-          ],
-        },
-        {
-          enteredName: 'Paracetamol',
-          form: 'TABLET',
-          strength: '500 mg',
-          originalInstructionText: '1-2 tablets every 6 hours PRN for fever.',
-          doseQuantity: 1,
-          doseUnit: 'tablet',
-          route: 'Oral',
-          frequencyCount: 4,
-          frequencyPeriod: 'AS_NEEDED',
-          timingDetails: 'Every 6 hours',
-          isPrn: true,
-          prnReason: 'Fever or mild pain',
-          durationDays: 5,
-          confidence: 0.91,
-          warningFlags: [],
-        },
-      ];
+      // 2. Execute extraction using active AI Provider (Gemini / GPT / Local Fallback)
+      const result = await aiProviderService.extractPrescription(
+        fileBuffer,
+        version.mimeType,
+        version.fileName
+      );
 
       const rawExtracted = {
-        prescriberName: 'Dr. Sarah Jenkins, MD',
-        clinicName: 'Metro Health Clinic',
-        prescribedDate: new Date().toISOString().split('T')[0],
-        medications: candidates,
+        prescriberName: result.prescriberName,
+        clinicName: result.clinicName,
+        prescribedDate: result.prescribedDate,
+        medications: result.medications,
+        usedModel: result.usedModel,
+        usedProvider: result.usedProvider,
       };
 
       const confidenceScores = {
-        overall: 0.87,
+        overall: result.overallConfidence,
         fields: {
-          prescriberName: 0.95,
-          clinicName: 0.92,
-          prescribedDate: 0.98,
-          medications: candidates.map((c) => ({ name: c.enteredName, confidence: c.confidence })),
+          ...result.fieldConfidence,
+          medications: result.medications.map((c) => ({ name: c.enteredName, confidence: c.confidence })),
         },
       };
 
+      // 3. Save as untrusted draft extraction requiring user confirmation
       await prisma.documentExtraction.update({
         where: { id: extraction.id },
         data: {
           status: 'EXTRACTED',
-          ocrText: mockRawText,
+          ocrText: result.ocrText,
           confidenceScoresJson: JSON.stringify(confidenceScores),
           rawExtractedJson: JSON.stringify(rawExtracted),
         },
       });
-    } catch (err) {
+
+      logger.info('Document extraction draft successfully generated', {
+        extractionId: extraction.id,
+        documentVersionId,
+        provider: result.usedProvider,
+        model: result.usedModel,
+        candidatesCount: result.medications.length,
+      });
+    } catch (err: unknown) {
+      logger.error('OCR extraction processing failed', {
+        extractionId: extraction.id,
+        error: err instanceof Error ? err.message : String(err),
+      });
+
       await prisma.documentExtraction.update({
         where: { id: extraction.id },
         data: {

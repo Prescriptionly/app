@@ -17,6 +17,8 @@ interface GroundedResponse {
   explanation: string;
   notPresentStatements: string[];
   disclaimer: string;
+  usedModel?: string;
+  usedProvider?: string;
 }
 
 export const AiAssistantPage: React.FC = () => {
@@ -128,7 +130,14 @@ export const AiAssistantPage: React.FC = () => {
         {result && (
           <div className="mt-6 pt-6 border-t border-slate-100 space-y-4 animate-in fade-in duration-150 text-xs">
             <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-              <span className="font-bold text-slate-900 text-sm">Grounded Analysis Result</span>
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-slate-900 text-sm">Grounded Analysis Result</span>
+                {result.usedModel && (
+                  <span className="badge bg-purple-50 text-purple-700 border border-purple-200 text-[10px] font-mono">
+                    {result.usedProvider ? `${result.usedProvider} (${result.usedModel})` : result.usedModel}
+                  </span>
+                )}
+              </div>
               <span className="text-slate-500 text-[11px]">Document: {result.documentTitle}</span>
             </div>
 

@@ -6,6 +6,9 @@ import {
   FileText,
   Users,
   Pill,
+  Sparkles,
+  CheckCircle2,
+  AlertCircle,
 } from 'lucide-react';
 
 export const AdminPage: React.FC = () => {
@@ -15,6 +18,13 @@ export const AdminPage: React.FC = () => {
     prescriptions: number;
     events: number;
     queue: { pending: number; failed: number };
+    activeAiConfig?: {
+      provider: 'GEMINI' | 'OPENAI' | 'MOCK';
+      model: string;
+      isActive: boolean;
+      hasApiKey: boolean;
+      statusDescription: string;
+    };
     systemHealth: string;
     timestamp: string;
   } | null>(null);
@@ -119,6 +129,64 @@ export const AdminPage: React.FC = () => {
               <p className="text-[11px] font-semibold text-slate-500 uppercase">Queue Pending</p>
               <h3 className="text-lg font-bold text-slate-900">{metrics.queue.pending}</h3>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Active AI / OCR Configuration */}
+      {metrics?.activeAiConfig && (
+        <div className="card p-5 space-y-3 bg-gradient-to-r from-slate-900 to-sky-950 text-white border-0 shadow-md">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-slate-700">
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-sky-400" />
+              <h3 className="text-sm font-bold text-white">Active AI Engine & Extraction Model</h3>
+            </div>
+            <span
+              className={`badge text-[10px] ${
+                metrics.activeAiConfig.isActive
+                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-semibold'
+                  : 'bg-amber-500/20 text-amber-300 border border-amber-500/30 font-semibold'
+              }`}
+            >
+              {metrics.activeAiConfig.isActive ? (
+                <span className="flex items-center gap-1">
+                  <CheckCircle2 className="w-3 h-3 text-emerald-400" /> LIVE {metrics.activeAiConfig.provider} ACTIVE
+                </span>
+              ) : (
+                <span className="flex items-center gap-1">
+                  <AlertCircle className="w-3 h-3 text-amber-400" /> LOCAL FALLBACK (DEACTIVATED)
+                </span>
+              )}
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+            <div className="p-2.5 rounded-lg bg-white/5 border border-white/10">
+              <p className="text-[10px] text-slate-400 font-semibold uppercase">Provider</p>
+              <p className="text-sm font-bold text-sky-300 mt-0.5">{metrics.activeAiConfig.provider}</p>
+            </div>
+
+            <div className="p-2.5 rounded-lg bg-white/5 border border-white/10">
+              <p className="text-[10px] text-slate-400 font-semibold uppercase">Selected Model (AI_MODEL)</p>
+              <p className="text-sm font-bold text-white font-mono mt-0.5">{metrics.activeAiConfig.model}</p>
+            </div>
+
+            <div className="p-2.5 rounded-lg bg-white/5 border border-white/10">
+              <p className="text-[10px] text-slate-400 font-semibold uppercase">API Key (AI_API_KEY)</p>
+              <p className="text-xs font-semibold text-slate-300 mt-0.5">
+                {metrics.activeAiConfig.hasApiKey ? 'Configured (Encrypted)' : 'Not Configured (Safe Offline Mode)'}
+              </p>
+            </div>
+          </div>
+
+          <p className="text-[11px] text-slate-300 font-medium">
+            Status: <span className="text-slate-100">{metrics.activeAiConfig.statusDescription}</span>
+          </p>
+
+          <div className="p-3 rounded-lg bg-black/30 border border-white/10 text-[11px] font-mono text-slate-300 space-y-1">
+            <p className="text-slate-400 font-sans font-semibold">Switch model / activate live AI via `.env`:</p>
+            <p className="text-sky-300">AI_API_KEY=your_gemini_or_openai_api_key</p>
+            <p className="text-emerald-300">AI_MODEL=gemini-1.5-flash <span className="text-slate-400"># or gemini-2.0-flash, gpt-4o, gpt-4o-mini, mock</span></p>
           </div>
         </div>
       )}
