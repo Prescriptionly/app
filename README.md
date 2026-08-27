@@ -1,105 +1,186 @@
 # Prescriptionly
 
-Prescriptionly is a patient-controlled medication and medical-record wallet. It preserves original prescriptions and medical documents, converts eligible documents into user-reviewed structured information, records what was prescribed, tracks what the patient reports actually happened, and supports traceable sharing and export.
+![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6)
+![React](https://img.shields.io/badge/React-19-149eca)
+![Node.js](https://img.shields.io/badge/Node.js-20%2B-339933)
+![MySQL](https://img.shields.io/badge/MySQL-8%2B-4479a1)
 
----
+Prescriptionly is a personal medical wallet for storing prescriptions and medical documents, organizing medication history, and recording what was actually taken over time.
 
-## Core Health-Data Principles
+The application keeps the original prescription separate from the patient's medication activity. A prescription remains an unchanged record of what was prescribed, while medication events record what the patient reports taking, skipping, applying, or receiving.
 
-1. **Evidence Preservation**: Original medical prescriptions and documents remain permanently intact in private storage.
-2. **Draft Untrusted Extractions**: OCR and AI output begins as untrusted draft predictions and requires explicit patient review before becoming clinical data.
-3. **Prescribed vs Actual Separation**: A doctor's prescription is historical evidence of clinical instructions. Medication events are the patient's reported reality. Neither silently overwrites the other.
-4. **Standalone Logging**: Over-the-counter (OTC) drugs, supplements, and vaccines can be tracked as standalone events without requiring a doctor's prescription.
-5. **Scoped Sharing & Emergency Access**: Sharing grants use explicit category selection, time expiration, and instantaneous revocation. Emergency cards provide a deliberately limited critical dataset for first responders.
+![Prescriptionly dashboard](docs/raw-ui/dashboard.png)
 
----
+## Features
 
-## Architecture & Technology Stack
+- Store prescriptions and medical documents as PDF, JPG, or PNG files.
+- Add prescriptions manually or review extracted details before saving them.
+- Track prescriptions, treatment courses, schedules, and patient-reported medication events separately.
+- Record over-the-counter medicines, supplements, injections, and other standalone medication activity.
+- Browse a chronological timeline of documents, prescriptions, treatments, and medication events.
+- Generate summaries and export records as PDF or structured JSON.
+- Share selected information through temporary links or a limited emergency card.
+- Manage more than one patient profile from the same account.
 
-- **Monorepo Workspaces**:
-  - `apps/api`: Node.js, Express, strict TypeScript, Prisma ORM, MySQL 9+.
-  - `apps/web`: React 19, Vite, strict TypeScript, Tailwind CSS, Lucide Icons.
-- **Database & Persistence**: MySQL with versioned Prisma migrations.
-- **Storage Adapter**: Typed private disk storage adapter with SHA-256 deduplication and MIME validation.
-- **Queue**: Database-backed asynchronous job queue with atomic leasing, retries, and deduplication.
+## Screenshots
 
----
+| Medical records | Prescription details |
+|---|---|
+| ![Prescriptionly medical records](docs/raw-ui/medical-records.png) | ![Prescriptionly prescription details](docs/raw-ui/prescription.png) |
 
-## Implemented Modules (0–22)
+## Technology Stack
 
-- **Module 0**: Workspace foundation, monorepo setup, environment validation, strict TypeScript.
-- **Module 1**: Authentication, password hashing (Argon2/crypto), server-managed opaque sessions, CSRF protection.
-- **Module 2**: Patient profiles, multi-profile switching, timezone management, data isolation.
-- **Module 3**: Medical document vault, multi-versioning, secure upload/download.
-- **Module 4**: OCR draft extraction, field confidence scoring, high-risk decimal ambiguity detection (`0.5 mg` vs `5 mg`).
-- **Module 5**: Interactive OCR review and confirmation workflow.
-- **Module 6**: Standard medication concepts catalog, custom drug fallback.
-- **Module 7**: Multi-item structured prescriptions with detailed dosage instructions.
-- **Module 8**: Active, paused, completed, and discontinued treatment courses.
-- **Module 9**: Flexible treatment scheduling and expected dose calculations.
-- **Module 10**: Patient-reported medication events (taken, administered, applied, skipped, partial) and standalone OTC logs.
-- **Module 11**: Real-time Prescribed vs Actual adherence and discrepancy comparison.
-- **Module 12**: Source-aware chronological medical timeline with provenance badges (`DOCTOR_PRESCRIBED`, `PATIENT_REPORTED`, `AI_EXTRACTED_DRAFT`, `SYSTEM_GENERATED`).
-- **Module 13**: Phase 2 patient-reported symptoms and non-causal timeline associations.
-- **Module 14**: Grounded AI document assistant with strict 3-tier grounding model (`FROM_DOCUMENT`, `AI_EXPLANATION`, `NOT_PRESENT`).
-- **Module 15**: Traceable patient and clinician health summary generator.
-- **Module 16**: Full wallet exports in PDF and canonical machine-readable JSON format.
-- **Module 17**: Scoped temporary share links with category selection and instant revocation.
-- **Module 18**: Deliberately limited emergency medical ID card and public QR view.
-- **Module 19**: Notification center and reminder management.
-- **Module 20**: Security consents, audit logging, and soft-delete/account deletion controls.
-- **Module 21**: Background worker queue with idempotency and exponential backoff retries.
-- **Module 22**: Privacy-preserving operational administration dashboard and job retry tools.
+### Frontend
 
----
+- React 19
+- React Router
+- Vite
+- TypeScript
+- Tailwind CSS
+- Lucide icons
+
+### Backend
+
+- Node.js
+- Express
+- TypeScript
+- Zod
+- Prisma ORM
+- MySQL
+
+### Supporting Services
+
+- Private local file storage adapter
+- Database-backed background job queue
+- PDFKit for PDF exports
+- Docker Compose for local MySQL
+
+## Project Structure
+
+```text
+.
+├── apps/
+│   ├── api/                  Express API, worker, Prisma schema and migrations
+│   └── web/                  React and Vite frontend
+├── docs/                     Product documentation and design references
+├── compose.yml               Local MySQL service
+├── .env.example              Example environment configuration
+└── package.json              npm workspace scripts
+```
 
 ## Getting Started
 
 ### Prerequisites
 
-- Node.js 20+
-- MySQL 8.0+ or MySQL 9.0+ running on `localhost:3306` (or via Docker Compose: `docker compose up -d`)
+- Node.js 20 or later
+- npm 10 or later
+- Docker with Docker Compose, or an existing MySQL 8 or later instance
 
-### Setup & Run
+### Installation
 
-1. **Install dependencies**:
+1. Clone the repository:
+
    ```bash
-   npm install
+   git clone https://github.com/Prescriptionly/app.git
+   cd app
    ```
 
-2. **Configure environment**:
+2. Install dependencies:
+
+   ```bash
+   npm ci
+   ```
+
+3. Create the local environment file:
+
    ```bash
    cp .env.example .env
    ```
 
-3. **Deploy database migrations and seed data**:
-   ```bash
-   npx prisma migrate deploy --schema=apps/api/prisma/schema.prisma
-   npm run db:seed --workspace=apps/api
-   ```
-   *Seeds standard medication catalog and demo user:* `patient@prescriptionly.local` / `Password123!`
+4. Start MySQL:
 
-4. **Run typecheck and build**:
    ```bash
-   npm run typecheck
-   npm run build
+   docker compose up -d
    ```
 
-5. **Run backend invariant tests**:
+   If you are using an existing MySQL server, update `DATABASE_URL` in `.env` instead.
+
+5. Generate the Prisma client, run migrations, and seed the database:
+
    ```bash
-   npm run test --workspace=apps/api
+   npm run db:generate
+   npm run db:migrate
+   npm run db:seed
    ```
 
-6. **Start local development servers**:
-   ```bash
-   # Terminal 1 (API Server):
-   npm run dev --workspace=apps/api
+6. Start the API and web application:
 
-   # Terminal 2 (Background Queue Worker):
+   ```bash
+   npm run dev
+   ```
+
+7. Start the background worker in another terminal:
+
+   ```bash
    npm run worker --workspace=apps/api
-
-   # Terminal 3 (Web UI):
-   npm run dev --workspace=apps/web
    ```
 
-Open `http://localhost:5173` to explore Prescriptionly.
+Open [http://localhost:5173](http://localhost:5173) in your browser. The API runs on [http://localhost:4000](http://localhost:4000).
+
+## Demo Account
+
+Running the database seed creates the following local account:
+
+```text
+Email: patient@prescriptionly.local
+Password: Password123!
+```
+
+This account is intended for local development only.
+
+## Environment Configuration
+
+The default development values are documented in `.env.example`.
+
+| Variable | Description |
+|---|---|
+| `PORT` | API server port |
+| `APP_URL` | Frontend URL allowed to access the API |
+| `DATABASE_URL` | MySQL connection string |
+| `SESSION_SECRET` | Secret used to protect application sessions |
+| `COOKIE_SECURE` | Enables secure cookies when using HTTPS |
+| `COOKIE_SAME_SITE` | SameSite policy for session cookies |
+| `STORAGE_LOCAL_DIR` | Local directory used for uploaded documents |
+| `MAX_FILE_SIZE_BYTES` | Maximum accepted upload size |
+
+Replace the example session secret and database credentials before using a shared or deployed environment.
+
+## Available Scripts
+
+| Command | Description |
+|---|---|
+| `npm run dev` | Starts the API and frontend development servers |
+| `npm run worker --workspace=apps/api` | Starts the background job worker |
+| `npm run build` | Builds all workspaces |
+| `npm run lint` | Runs ESLint across all workspaces |
+| `npm run typecheck` | Runs TypeScript checks across all workspaces |
+| `npm run test` | Runs the backend invariant test suite |
+| `npm run db:generate` | Generates the Prisma client |
+| `npm run db:migrate` | Applies development database migrations |
+| `npm run db:seed` | Seeds the medication catalog and demo account |
+| `npm run db:studio` | Opens Prisma Studio |
+
+## Development Checks
+
+Run the following commands before submitting changes:
+
+```bash
+npm run lint
+npm run typecheck
+npm run build
+npm run test
+```
+
+## Medical Disclaimer
+
+Prescriptionly is a record-keeping application and does not provide medical advice, diagnosis, treatment recommendations, or emergency services. Always consult a qualified healthcare professional regarding medical decisions.
