@@ -1,0 +1,85 @@
+name: Deploy Prescriptionly
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Never run two deploys at once; queue instead of cancelling a live deploy.
+concurrency:
+  group: deploy-prescriptionly
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Build & deploy on OCI VM
+    runs-on: [self-hosted, prescriptionly]
+    environment: demo
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Write production .env
+        # Values come from the GitHub "demo" environment (Settings > Environments).
+        # Secrets: DATABASE_URL, SESSION_SECRET, AI_API_KEY (optional)
+        # Variables: APP_NAME, APP_URL, PORT, AI_MODEL, AI_PROVIDER, AI_BASE_URL,
+        #            COOKIE_SECURE, COOKIE_SAME_SITE, MAX_FILE_SIZE_BYTES, AUTO_SEED
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          SESSION_SECRET: ${{ secrets.SESSION_SECRET }}
+          AI_API_KEY: ${{ secrets.AI_API_KEY }}
+          APP_NAME: ${{ vars.APP_NAME }}
+          APP_URL: ${{ vars.APP_URL }}
+          PORT: ${{ vars.PORT }}
+          AI_MODEL: ${{ vars.AI_MODEL }}
+          AI_PROVIDER: ${{ vars.AI_PROVIDER }}
+          AI_BASE_URL: ${{ vars.AI_BASE_URL }}
+          COOKIE_SECURE: ${{ vars.COOKIE_SECURE }}
+          COOKIE_SAME_SITE: ${{ vars.COOKIE_SAME_SITE }}
+          MAX_FILE_SIZE_BYTES: ${{ vars.MAX_FILE_SIZE_BYTES }}
+          AUTO_SEED: ${{ vars.AUTO_SEED }}
+        run: |
+          umask 077
+          cat > .env <<EOF
+          NODE_ENV=production
+          PORT=${PORT:-8091}
+          APP_NAME=${APP_NAME:-Prescriptionly}
+          APP_URL=${APP_URL:-https://prescriptionly.mmd-rehan.com}
+          DATABASE_URL=${DATABASE_URL}
+          SESSION_SECRET=${SESSION_SECRET}
+          COOKIE_SECURE=${COOKIE_SECURE:-true}
+          COOKIE_SAME_SITE=${COOKIE_SAME_SITE:-lax}
+          MAX_FILE_SIZE_BYTES=${MAX_FILE_SIZE_BYTES:-15728640}
+          AI_API_KEY=${AI_API_KEY}
+          AI_MODEL=${AI_MODEL:-gemini-1.5-flash}
+          AI_BASE_URL=${AI_BASE_URL}
+          AI_PROVIDER=${AI_PROVIDER:-mock}
+          AUTO_SEED=${AUTO_SEED:-false}
+          EOF
+
+      - name: Build image
+        run: docker compose -f docker-compose.yml build --pull
+
+      - name: Deploy stack
+        run: docker compose -f docker-compose.yml up -d
+
+      - name: Wait for app health
+        run: |
+          PORT_TO_CHECK=$(grep -E '^PORT=' .env | cut -d= -f2)
+          for i in $(seq 1 30); do
+            code=$(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1:${PORT_TO_CHECK}/" || true)
+            echo "attempt $i: HTTP $code"
+            if [ "$code" = "200" ]; then
+              echo "app healthy"; exit 0
+            fi
+            sleep 3
+          done
+          echo "::error::app did not become healthy in time"
+          docker compose -f docker-compose.yml logs --tail=150 app
+          exit 1
+
+      - name: Prune dangling images
+        if: always()
+        run: docker image prune -f
