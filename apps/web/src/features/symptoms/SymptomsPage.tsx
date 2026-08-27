@@ -96,8 +96,7 @@ export const SymptomsPage: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <div className="flex items-center gap-2 mb-1">
-            <h2 className="text-xl font-bold text-slate-900 tracking-tight">Symptoms & Observations</h2>
-            <span className="badge bg-purple-100 text-purple-800 text-[10px]">Phase 2</span>
+            <h2 className="text-xl font-bold text-slate-900 tracking-tight">Symptoms & Observations</h2>            
           </div>
           <p className="text-xs text-slate-500">
             Record patient-reported observations. Associations with treatments are non-causal timeline correlations.
