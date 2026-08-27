@@ -16,8 +16,8 @@ build
 
 # Storage and uploads
 uploads/
-storage/
-temp/
+/storage/
+/temp/
 
 # Logs
 logs
