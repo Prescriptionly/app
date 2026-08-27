@@ -28,7 +28,18 @@ services:
     # extra_hosts enables connecting to host's MySQL (e.g. host.docker.internal) on Linux
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    networks:
+      - prescriptionly
 
 volumes:
   prescriptionly_uploads:
     driver: local
+
+networks:
+  # Fixed subnet so the host MySQL grant (see deploy docs) doesn't break every
+  # time the compose project is recreated with a different auto-assigned subnet.
+  prescriptionly:
+    name: prescriptionly
+    ipam:
+      config:
+        - subnet: 172.28.92.0/24
