@@ -1,3 +1,6 @@
+process.env.NODE_ENV = 'test';
+process.env.AI_MODEL = 'mock';
+
 import assert from 'assert';
 import { prisma } from '../src/infrastructure/database/prisma';
 import { authService } from '../src/modules/auth/auth.service';

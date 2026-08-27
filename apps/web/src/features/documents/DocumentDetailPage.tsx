@@ -6,6 +6,8 @@ import {
   ArrowLeft,
   Sparkles,
   CheckCircle2,
+  AlertTriangle,
+  RefreshCw,
 } from 'lucide-react';
 
 export const DocumentDetailPage: React.FC = () => {
@@ -28,6 +30,7 @@ export const DocumentDetailPage: React.FC = () => {
         id: string;
         status: string;
         isConfirmed: boolean;
+        errorMessage?: string | null;
         ocrText?: string | null;
         rawExtractedJson?: string | null;
         confirmedAt?: string | null;
@@ -49,8 +52,9 @@ export const DocumentDetailPage: React.FC = () => {
   } | null>(null);
 
   const [isLoading, setIsLoading] = useState(true);
+  const [isRetrying, setIsRetrying] = useState(false);
 
-  useEffect(() => {
+  const fetchDoc = () => {
     if (!id) return;
     setIsLoading(true);
     api
@@ -58,7 +62,24 @@ export const DocumentDetailPage: React.FC = () => {
       .then(setDoc)
       .catch((err) => console.error(err))
       .finally(() => setIsLoading(false));
+  };
+
+  useEffect(() => {
+    fetchDoc();
   }, [id]);
+
+  const handleRetryExtraction = async (versionId: string) => {
+    setIsRetrying(true);
+    try {
+      await api.post(`/api/v1/ocr/process/${versionId}`);
+      fetchDoc();
+    } catch (err) {
+      console.error(err);
+      fetchDoc();
+    } finally {
+      setIsRetrying(false);
+    }
+  };
 
   if (isLoading) {
     return <div className="py-12 text-center text-xs text-slate-400">Loading document details...</div>;
@@ -141,6 +162,22 @@ export const DocumentDetailPage: React.FC = () => {
                 >
                   Review & Confirm Draft
                 </Link>
+              ) : extraction.status === 'FAILED' ? (
+                <div className="flex items-center gap-2">
+                  <span className="badge bg-red-100 text-red-800 text-xs font-semibold">
+                    Extraction Failed
+                  </span>
+                  {latestVersion && (
+                    <button
+                      onClick={() => handleRetryExtraction(latestVersion.id)}
+                      disabled={isRetrying}
+                      className="btn-secondary text-xs py-1 px-2.5 flex items-center gap-1.5"
+                    >
+                      <RefreshCw className={`w-3 h-3 ${isRetrying ? 'animate-spin' : ''}`} />
+                      {isRetrying ? 'Retrying...' : 'Retry'}
+                    </button>
+                  )}
+                </div>
               ) : (
                 <span className="badge bg-slate-200 text-slate-700 text-xs">{extraction.status}</span>
               )
@@ -148,6 +185,18 @@ export const DocumentDetailPage: React.FC = () => {
               <span className="text-xs text-slate-400">No extraction attached</span>
             )}
           </div>
+
+          {extraction?.status === 'FAILED' && (
+            <div className="p-3.5 rounded-lg bg-red-50 border border-red-200 text-red-800 text-xs space-y-1.5">
+              <div className="flex items-center gap-1.5 font-bold">
+                <AlertTriangle className="w-4 h-4 text-red-600 shrink-0" />
+                <span>AI / OCR Extraction Error</span>
+              </div>
+              <p className="font-mono text-[11px] text-red-700 break-words">
+                {extraction.errorMessage || 'AI provider request failed. Please verify your AI API key and model in .env'}
+              </p>
+            </div>
+          )}
 
           <p className="text-xs text-slate-500">
             OCR extracts draft candidate medications. To prevent medical errors, extraction results remain untrusted drafts until you explicitly review and confirm them.

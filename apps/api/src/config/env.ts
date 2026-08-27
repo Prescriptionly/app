@@ -1,9 +1,27 @@
 import { z } from 'zod';
 import dotenv from 'dotenv';
 import path from 'path';
+import fs from 'fs';
 
-dotenv.config({ path: path.resolve(process.cwd(), '../../.env') });
-dotenv.config();
+// Look for .env in current working directory, project root, and apps/api
+const envCandidates = [
+  path.resolve(process.cwd(), '.env'),
+  path.resolve(process.cwd(), 'apps/api/.env'),
+  path.resolve(__dirname, '../../.env'),
+  path.resolve(__dirname, '../../../.env'),
+  path.resolve(__dirname, '../../../../.env'),
+];
+
+for (const envFile of envCandidates) {
+  if (fs.existsSync(envFile)) {
+    const parsed = dotenv.parse(fs.readFileSync(envFile));
+    for (const [key, value] of Object.entries(parsed)) {
+      if (value !== '' && value !== undefined && (process.env[key] === undefined || process.env.NODE_ENV !== 'test')) {
+        process.env[key] = value;
+      }
+    }
+  }
+}
 
 const envSchema = z.object({
   PORT: z.coerce.number().default(4000),
@@ -17,10 +35,11 @@ const envSchema = z.object({
   STORAGE_LOCAL_DIR: z.string().default('./uploads'),
   MAX_FILE_SIZE_BYTES: z.coerce.number().default(15728640), // 15MB
 
-  // AI & OCR Model Configuration
+  // AI & OCR Model Configuration (Zero Lock-in: Gemini, OpenAI, AgentRouter, or custom OpenAI-compatible gateways)
   AI_API_KEY: z.string().optional(),
   AI_MODEL: z.string().default('gemini-1.5-flash'),
-  AI_PROVIDER: z.enum(['auto', 'gemini', 'openai', 'mock']).default('auto'),
+  AI_BASE_URL: z.string().optional(), // e.g. "https://agentrouter.org/v1"
+  AI_PROVIDER: z.enum(['auto', 'gemini', 'openai', 'agentrouter', 'mock']).default('auto'),
   GEMINI_API_KEY: z.string().optional(),
   OPENAI_API_KEY: z.string().optional(),
 });

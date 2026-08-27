@@ -37,6 +37,7 @@ export const OcrReviewPage: React.FC = () => {
     id: string;
     status: string;
     isConfirmed: boolean;
+    errorMessage?: string | null;
     ocrText?: string | null;
     confidenceScoresJson?: string | null;
     rawExtractedJson?: string | null;
@@ -203,6 +204,21 @@ export const OcrReviewPage: React.FC = () => {
           <strong className="underline decoration-amber-500 font-bold">5 mg</strong>) and frequencies. Confirmed values will create structured active regimens.
         </p>
       </div>
+
+      {extraction.errorMessage && (
+        <div className="p-4 rounded-xl bg-red-50 border border-red-200 text-red-800 text-xs space-y-1.5 shadow-xs">
+          <div className="flex items-center gap-2 font-bold text-red-950">
+            <AlertTriangle className="w-4 h-4 text-red-600 shrink-0" />
+            <span>AI / OCR Extraction Error Notice</span>
+          </div>
+          <p className="font-mono text-[11px] text-red-700 break-words">
+            {extraction.errorMessage}
+          </p>
+          <p className="text-slate-600 text-[11px]">
+            You can still enter or correct the prescription details manually below and confirm.
+          </p>
+        </div>
+      )}
 
       {error && (
         <div className="p-3.5 rounded-lg bg-red-50 border border-red-200 text-red-700 text-xs flex items-center gap-2">

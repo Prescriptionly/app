@@ -19,8 +19,9 @@ export const AdminPage: React.FC = () => {
     events: number;
     queue: { pending: number; failed: number };
     activeAiConfig?: {
-      provider: 'GEMINI' | 'OPENAI' | 'MOCK';
+      provider: 'GEMINI' | 'OPENAI' | 'AGENTROUTER' | 'MOCK';
       model: string;
+      baseURL?: string;
       isActive: boolean;
       hasApiKey: boolean;
       statusDescription: string;
@@ -185,8 +186,9 @@ export const AdminPage: React.FC = () => {
 
           <div className="p-3 rounded-lg bg-black/30 border border-white/10 text-[11px] font-mono text-slate-300 space-y-1">
             <p className="text-slate-400 font-sans font-semibold">Switch model / activate live AI via `.env`:</p>
-            <p className="text-sky-300">AI_API_KEY=your_gemini_or_openai_api_key</p>
-            <p className="text-emerald-300">AI_MODEL=gemini-1.5-flash <span className="text-slate-400"># or gemini-2.0-flash, gpt-4o, gpt-4o-mini, mock</span></p>
+            <p className="text-sky-300">AI_API_KEY=your_token_or_key</p>
+            <p className="text-emerald-300">AI_MODEL=gemini-1.5-flash <span className="text-slate-400"># or gpt-4o, claude-3-5-sonnet, deepseek-chat</span></p>
+            <p className="text-purple-300">AI_BASE_URL=https://agentrouter.org/v1 <span className="text-slate-400"># (Optional: for AgentRouter gateway)</span></p>
           </div>
         </div>
       )}

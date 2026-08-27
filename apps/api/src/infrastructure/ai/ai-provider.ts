@@ -31,7 +31,7 @@ export interface AiExtractionResult {
   fieldConfidence: Record<string, number>;
   ocrText: string;
   usedModel: string;
-  usedProvider: 'GEMINI' | 'OPENAI' | 'MOCK';
+  usedProvider: 'GEMINI' | 'OPENAI' | 'AGENTROUTER' | 'MOCK';
 }
 
 export interface AiGroundedQuestionResult {
@@ -40,12 +40,13 @@ export interface AiGroundedQuestionResult {
   notPresentStatements: string[];
   disclaimer: string;
   usedModel: string;
-  usedProvider: 'GEMINI' | 'OPENAI' | 'MOCK';
+  usedProvider: 'GEMINI' | 'OPENAI' | 'AGENTROUTER' | 'MOCK';
 }
 
 export interface ActiveAiConfig {
-  provider: 'GEMINI' | 'OPENAI' | 'MOCK';
+  provider: 'GEMINI' | 'OPENAI' | 'AGENTROUTER' | 'MOCK';
   model: string;
+  baseURL?: string;
   isActive: boolean;
   hasApiKey: boolean;
   statusDescription: string;
@@ -53,15 +54,23 @@ export interface ActiveAiConfig {
 
 export class AiProviderService {
   /**
-   * Determine the active AI provider, model, and activation status
+   * Determine the active AI provider, model, baseURL, and activation status
    */
   getActiveConfig(): ActiveAiConfig {
     const rawModel = (env.AI_MODEL || 'gemini-1.5-flash').trim().toLowerCase();
     const explicitProvider = env.AI_PROVIDER || 'auto';
+    const customBaseUrl = env.AI_BASE_URL?.trim();
 
-    let provider: 'GEMINI' | 'OPENAI' | 'MOCK' = 'MOCK';
+    let provider: 'GEMINI' | 'OPENAI' | 'AGENTROUTER' | 'MOCK' = 'MOCK';
 
-    if (rawModel === 'mock' || rawModel === 'local' || rawModel === 'offline' || explicitProvider === 'mock') {
+    if (
+      process.env.NODE_ENV === 'test' ||
+      env.NODE_ENV === 'test' ||
+      rawModel === 'mock' ||
+      rawModel === 'local' ||
+      rawModel === 'offline' ||
+      explicitProvider === 'mock'
+    ) {
       return {
         provider: 'MOCK',
         model: rawModel,
@@ -71,9 +80,25 @@ export class AiProviderService {
       };
     }
 
-    if (explicitProvider === 'gemini' || rawModel.startsWith('gemini')) {
+    if (customBaseUrl && customBaseUrl.length > 0) {
+      if (customBaseUrl.includes('agentrouter') || explicitProvider === 'agentrouter') {
+        provider = 'AGENTROUTER';
+      } else {
+        provider = 'OPENAI';
+      }
+    } else if (explicitProvider === 'agentrouter') {
+      provider = 'AGENTROUTER';
+    } else if (explicitProvider === 'gemini' || rawModel.startsWith('gemini')) {
       provider = 'GEMINI';
-    } else if (explicitProvider === 'openai' || rawModel.startsWith('gpt') || rawModel.startsWith('o1') || rawModel.startsWith('o3')) {
+    } else if (
+      explicitProvider === 'openai' ||
+      rawModel.startsWith('gpt') ||
+      rawModel.startsWith('o1') ||
+      rawModel.startsWith('o3') ||
+      rawModel.startsWith('claude') ||
+      rawModel.startsWith('deepseek') ||
+      rawModel.startsWith('qwen')
+    ) {
       provider = 'OPENAI';
     } else {
       provider = 'GEMINI';
@@ -82,26 +107,38 @@ export class AiProviderService {
     const apiKey = this.resolveApiKey(provider);
     const hasApiKey = !!apiKey && apiKey.length > 0;
 
+    const resolvedBaseUrl = customBaseUrl || (provider === 'AGENTROUTER' ? 'https://agentrouter.org/v1' : undefined);
+
+    let statusDescription = '';
+    if (!hasApiKey) {
+      statusDescription = `Deactivated (Missing ${provider} API Key / AI_API_KEY) - falling back to local engine`;
+    } else if (provider === 'AGENTROUTER') {
+      statusDescription = `Active (AgentRouter Gateway: ${resolvedBaseUrl} | Model: ${env.AI_MODEL})`;
+    } else if (resolvedBaseUrl) {
+      statusDescription = `Active (OpenAI-Compatible Gateway: ${resolvedBaseUrl} | Model: ${env.AI_MODEL})`;
+    } else {
+      statusDescription = `Active (${provider} Direct API | Model: ${env.AI_MODEL})`;
+    }
+
     return {
       provider,
       model: env.AI_MODEL || (provider === 'GEMINI' ? 'gemini-1.5-flash' : 'gpt-4o-mini'),
+      baseURL: resolvedBaseUrl,
       isActive: hasApiKey,
       hasApiKey,
-      statusDescription: hasApiKey
-        ? `Active (${provider} - ${env.AI_MODEL})`
-        : `Deactivated (Missing ${provider === 'GEMINI' ? 'GEMINI_API_KEY / AI_API_KEY' : 'OPENAI_API_KEY / AI_API_KEY'}) - falling back to local engine`,
+      statusDescription,
     };
   }
 
-  private resolveApiKey(provider: 'GEMINI' | 'OPENAI' | 'MOCK'): string | undefined {
+  private resolveApiKey(provider: 'GEMINI' | 'OPENAI' | 'AGENTROUTER' | 'MOCK'): string | undefined {
     if (env.AI_API_KEY && env.AI_API_KEY.trim().length > 0) {
       return env.AI_API_KEY.trim();
     }
     if (provider === 'GEMINI') {
       return env.GEMINI_API_KEY?.trim();
     }
-    if (provider === 'OPENAI') {
-      return env.OPENAI_API_KEY?.trim();
+    if (provider === 'OPENAI' || provider === 'AGENTROUTER') {
+      return env.OPENAI_API_KEY?.trim() || env.GEMINI_API_KEY?.trim();
     }
     return undefined;
   }
@@ -125,20 +162,22 @@ export class AiProviderService {
     }
 
     try {
-      if (config.provider === 'GEMINI') {
+      if (config.provider === 'GEMINI' && !config.baseURL) {
         return await this.extractWithGemini(fileBuffer, mimeType, config.model);
-      } else if (config.provider === 'OPENAI') {
-        return await this.extractWithOpenAI(fileBuffer, mimeType, config.model);
+      } else {
+        // OPENAI, AGENTROUTER, or custom OpenAI-compatible gateway
+        return await this.extractWithOpenAICompatible(fileBuffer, mimeType, config.model, config.baseURL, config.provider);
       }
     } catch (err: unknown) {
-      logger.error('Live AI extraction failed, safely falling back to local engine', {
-        error: err instanceof Error ? err.message : String(err),
+      const errMsg = err instanceof Error ? err.message : String(err);
+      logger.error('Live AI extraction failed', {
+        error: errMsg,
         model: config.model,
         provider: config.provider,
+        baseURL: config.baseURL,
       });
+      throw new Error(`AI Extraction Error (${config.provider} / ${config.model}): ${errMsg}`);
     }
-
-    return this.localFallbackExtraction(fileName);
   }
 
   /**
@@ -157,20 +196,22 @@ export class AiProviderService {
     }
 
     try {
-      if (config.provider === 'GEMINI') {
+      if (config.provider === 'GEMINI' && !config.baseURL) {
         return await this.answerWithGemini(documentTitle, documentCategory, ocrText, question, config.model);
-      } else if (config.provider === 'OPENAI') {
-        return await this.answerWithOpenAI(documentTitle, documentCategory, ocrText, question, config.model);
+      } else {
+        // OPENAI, AGENTROUTER, or custom OpenAI-compatible gateway
+        return await this.answerWithOpenAICompatible(documentTitle, documentCategory, ocrText, question, config.model, config.baseURL, config.provider);
       }
     } catch (err: unknown) {
-      logger.error('Live AI question answering failed, safely falling back to local engine', {
-        error: err instanceof Error ? err.message : String(err),
+      const errMsg = err instanceof Error ? err.message : String(err);
+      logger.error('Live AI question answering failed', {
+        error: errMsg,
         model: config.model,
         provider: config.provider,
+        baseURL: config.baseURL,
       });
+      throw new Error(`AI Assistant Error (${config.provider} / ${config.model}): ${errMsg}`);
     }
-
-    return this.localFallbackAnswer(documentTitle, documentCategory, ocrText, question);
   }
 
   // ==========================================
@@ -238,7 +279,7 @@ Return ONLY a valid JSON object matching this schema:
 
     const response = await model.generateContent([prompt, part]);
     const text = response.response.text();
-    const parsed = JSON.parse(text);
+    const parsed = this.parseCleanJson(text);
 
     return {
       prescriberName: parsed.prescriberName || null,
@@ -297,7 +338,7 @@ Return JSON matching:
 }`;
 
     const response = await model.generateContent([prompt]);
-    const parsed = JSON.parse(response.response.text());
+    const parsed = this.parseCleanJson(response.response.text());
 
     return {
       groundedFacts: parsed.groundedFacts || [],
@@ -312,16 +353,21 @@ Return JSON matching:
   }
 
   // ==========================================
-  // OpenAI GPT Implementation
+  // OpenAI & AgentRouter Gateway Implementation
   // ==========================================
 
-  private async extractWithOpenAI(
+  private async extractWithOpenAICompatible(
     fileBuffer: Buffer,
     mimeType: string,
-    modelName: string
+    modelName: string,
+    baseURL?: string,
+    provider: 'OPENAI' | 'AGENTROUTER' | 'GEMINI' | 'MOCK' = 'OPENAI'
   ): Promise<AiExtractionResult> {
-    const apiKey = this.resolveApiKey('OPENAI')!;
-    const openai = new OpenAI({ apiKey });
+    const apiKey = this.resolveApiKey(provider)!;
+    const openai = new OpenAI({
+      apiKey,
+      baseURL: baseURL || undefined,
+    });
 
     const base64Data = fileBuffer.toString('base64');
     const imageMediaType = mimeType || 'image/jpeg';
@@ -336,7 +382,14 @@ Return JSON matching:
           content: `You are a medical OCR extraction specialist for Prescriptionly.
 Extract all structured clinical items from the attached prescription or medical image.
 Detect decimal ambiguities (e.g. 0.5 mg vs 5 mg) and add warningFlags.
-Return JSON with prescriberName, clinicName, prescribedDate, overallConfidence, ocrText, fieldConfidence, and medications list.`,
+Return a valid JSON object with:
+- "prescriberName": string | null
+- "clinicName": string | null
+- "prescribedDate": string | null (YYYY-MM-DD)
+- "overallConfidence": number
+- "ocrText": string
+- "fieldConfidence": { "prescriberName": number, "clinicName": number, "prescribedDate": number }
+- "medications": array of objects with enteredName, form (TABLET/CAPSULE/SYRUP/INJECTION/INHALER/CREAM/DROPS/PATCH/OTHER), strength, originalInstructionText, doseQuantity, doseUnit, frequencyCount, frequencyPeriod (DAY/WEEK/MONTH/AS_NEEDED), isPrn, confidence, warningFlags.`,
         },
         {
           role: 'user',
@@ -358,7 +411,7 @@ Return JSON with prescriberName, clinicName, prescribedDate, overallConfidence, 
     });
 
     const content = response.choices[0]?.message?.content || '{}';
-    const parsed = JSON.parse(content);
+    const parsed = this.parseCleanJson(content);
 
     return {
       prescriberName: parsed.prescriberName || null,
@@ -369,19 +422,24 @@ Return JSON with prescriberName, clinicName, prescribedDate, overallConfidence, 
       fieldConfidence: parsed.fieldConfidence || {},
       ocrText: parsed.ocrText || content,
       usedModel: modelName,
-      usedProvider: 'OPENAI',
+      usedProvider: provider,
     };
   }
 
-  private async answerWithOpenAI(
+  private async answerWithOpenAICompatible(
     documentTitle: string,
     documentCategory: string,
     ocrText: string,
     question: string,
-    modelName: string
+    modelName: string,
+    baseURL?: string,
+    provider: 'OPENAI' | 'AGENTROUTER' | 'GEMINI' | 'MOCK' = 'OPENAI'
   ): Promise<AiGroundedQuestionResult> {
-    const apiKey = this.resolveApiKey('OPENAI')!;
-    const openai = new OpenAI({ apiKey });
+    const apiKey = this.resolveApiKey(provider)!;
+    const openai = new OpenAI({
+      apiKey,
+      baseURL: baseURL || undefined,
+    });
 
     const response = await openai.chat.completions.create({
       model: modelName,
@@ -391,7 +449,7 @@ Return JSON with prescriberName, clinicName, prescribedDate, overallConfidence, 
           role: 'system',
           content: `You are a clinical document assistant in Prescriptionly.
 Answer the patient's question STRICTLY grounded in the document evidence.
-Return JSON with:
+Return a valid JSON object with:
 - "groundedFacts": string[] (explicit facts from text)
 - "explanation": string (plain language medical context)
 - "notPresentStatements": string[] (information not in document)
@@ -413,7 +471,7 @@ Patient Question: "${question}"`,
     });
 
     const content = response.choices[0]?.message?.content || '{}';
-    const parsed = JSON.parse(content);
+    const parsed = this.parseCleanJson(content);
 
     return {
       groundedFacts: parsed.groundedFacts || [],
@@ -423,7 +481,7 @@ Patient Question: "${question}"`,
         parsed.disclaimer ||
         'Prescriptionly AI Assistant answers are grounded strictly in your uploaded document for informational purposes and never constitute medical advice.',
       usedModel: modelName,
-      usedProvider: 'OPENAI',
+      usedProvider: provider,
     };
   }
 
@@ -562,6 +620,19 @@ Rx:
       usedModel: 'local-fallback',
       usedProvider: 'MOCK',
     };
+  }
+
+  private parseCleanJson(rawText: string): Record<string, any> {
+    try {
+      const clean = rawText
+        .replace(/^```json\s*/i, '')
+        .replace(/^```\s*/i, '')
+        .replace(/\s*```$/i, '')
+        .trim();
+      return JSON.parse(clean);
+    } catch {
+      return {};
+    }
   }
 
   private sanitizeMedications(rawList: unknown[]): ExtractedMedicationCandidate[] {

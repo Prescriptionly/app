@@ -197,6 +197,10 @@ export const DocumentsPage: React.FC = () => {
                         <Sparkles className="w-3 h-3" />
                         Review Draft
                       </Link>
+                    ) : extraction.status === 'FAILED' ? (
+                      <span className="badge bg-red-100 text-red-800 text-[10px] font-semibold">
+                        AI Extraction Failed
+                      </span>
                     ) : (
                       <span className="badge bg-slate-100 text-slate-600 text-[10px]">Processing OCR...</span>
                     )
