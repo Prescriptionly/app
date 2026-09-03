@@ -9,6 +9,12 @@ Prescriptionly is a personal medical wallet for storing prescriptions and medica
 
 The application keeps the original prescription separate from the patient's medication activity. A prescription remains an unchanged record of what was prescribed, while medication events record what the patient reports taking, skipping, applying, or receiving.
 
+## Demo
+
+[![Watch the Prescriptionly demo on YouTube](https://img.youtube.com/vi/5l-dwbP_aP4/maxresdefault.jpg)](https://youtu.be/5l-dwbP_aP4)
+
+[Watch the 4-minute product walkthrough on YouTube](https://youtu.be/5l-dwbP_aP4)
+
 ![Prescriptionly dashboard](docs/raw-ui/dashboard.png)
 
 ## Features
